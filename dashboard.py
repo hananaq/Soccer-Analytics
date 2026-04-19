@@ -92,6 +92,16 @@ CHART_PLOT = "#f8fafc"
 CHART_FONT = "#1a1a2e"
 CHART_GRID = "#e2e8f0"
 
+def ppn_chart(fig, **kwargs):
+    """Wrapper around st.plotly_chart — forces dark text on axes, title, and legend."""
+    fig.update_layout(
+        title_font_color=CHART_FONT,
+        legend=dict(font=dict(color=CHART_FONT)),
+    )
+    fig.update_xaxes(tickfont_color=CHART_FONT, title_font_color=CHART_FONT)
+    fig.update_yaxes(tickfont_color=CHART_FONT, title_font_color=CHART_FONT)
+    st.plotly_chart(fig, **kwargs)
+
 # ── Data loading ──────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data():
@@ -268,14 +278,14 @@ with tab1:
     worst_dos = phase_stats.loc[phase_stats.match_phase == worst_third, "avg_DOS"].values[0]
     bw1.markdown(f"""
 <div style='background:#dcfce7;border-left:5px solid #16a34a;border-radius:8px;
-            padding:14px 18px;min-height:80px;'>
+            padding:14px 18px;min-height:80px;margin-bottom:1.4rem;'>
   <div style='color:#166534;font-size:12px;font-weight:700;margin-bottom:6px;'>✅ BEST THIRD</div>
   <div style='color:#14532d;font-size:17px;font-weight:800;'>{best_third}</div>
   <div style='color:#166534;font-size:13px;margin-top:4px;'>Avg DOS &nbsp;<b>{best_dos:.3f}</b></div>
 </div>""", unsafe_allow_html=True)
     bw2.markdown(f"""
 <div style='background:#fee2e2;border-left:5px solid #dc2626;border-radius:8px;
-            padding:14px 18px;min-height:80px;'>
+            padding:14px 18px;min-height:80px;margin-bottom:1.4rem;'>
   <div style='color:#991b1b;font-size:12px;font-weight:700;margin-bottom:6px;'>❌ WORST THIRD</div>
   <div style='color:#7f1d1d;font-size:17px;font-weight:800;'>{worst_third}</div>
   <div style='color:#991b1b;font-size:13px;margin-top:4px;'>Avg DOS &nbsp;<b>{worst_dos:.3f}</b></div>
@@ -303,7 +313,7 @@ with tab1:
             yaxis_title="Value",
             yaxis=dict(range=[0, phase_stats[["avg_DOS","avg_G","fail_rate"]].max().max() * 1.25], gridcolor=CHART_GRID),
         )
-        st.plotly_chart(fig_ph, use_container_width=True)
+        ppn_chart(fig_ph, use_container_width=True)
 
     with col_ph2:
         fig_opp_ph = px.bar(
@@ -320,7 +330,7 @@ with tab1:
             font=dict(color=CHART_FONT), showlegend=False, height=420,
             yaxis=dict(range=[0, phase_stats["avg_opp"].max() * 1.25], gridcolor=CHART_GRID),
         )
-        st.plotly_chart(fig_opp_ph, use_container_width=True)
+        ppn_chart(fig_opp_ph, use_container_width=True)
 
     st.divider()
     col_l, col_r = st.columns(2)
@@ -338,19 +348,25 @@ with tab1:
                          annotation_text="median", annotation_font_color="yellow")
         fig_gt.update_layout(paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                               font=dict(color=CHART_FONT))
-        st.plotly_chart(fig_gt, use_container_width=True)
+        ppn_chart(fig_gt, use_container_width=True)
 
     with col_r:
+        _pv = filt.copy()
+        _pv["Outcome"] = _pv["success"].map({1:"Successful", 0:"Failed"})
         fig_pv = px.scatter(
-            filt, x="P_t", y="V_t", color="success",
-            color_discrete_map={1:"#2ecc71", 0:"#e74c3c"},
-            opacity=0.6, title="P(t) vs V(t)",
+            _pv, x="P_t", y="V_t", color="Outcome",
+            color_discrete_map={"Successful":"#2ecc71", "Failed":"#e74c3c"},
+            opacity=0.85, title="P(t) vs V(t)",
             labels={"P_t":"P(t) — success prob.","V_t":"V(t) — space value"},
             hover_data=["pass_id","G_t","team"],
         )
+        fig_pv.add_shape(type="line", x0=0, y0=0, x1=1, y1=1,
+                         line=dict(color="#64748b", dash="dash", width=1.5))
+        fig_pv.add_annotation(x=0.82, y=0.88, text="P = V",
+                               showarrow=False, font=dict(color="#64748b", size=10))
         fig_pv.update_layout(paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                               font=dict(color=CHART_FONT))
-        st.plotly_chart(fig_pv, use_container_width=True)
+        ppn_chart(fig_pv, use_container_width=True)
 
     st.divider()
     st.markdown("#### Team Summary")
@@ -653,7 +669,7 @@ with tab3:
             font=dict(color=CHART_FONT), violinmode="group",
             yaxis_title="Decision Optimality Score",
         )
-        st.plotly_chart(fig_v, use_container_width=True)
+        ppn_chart(fig_v, use_container_width=True)
 
     with col2:
         ph_s = (filt4.groupby("match_phase")
@@ -671,7 +687,7 @@ with tab3:
             title="Match Phase Analysis", barmode="group",
             paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
             font=dict(color=CHART_FONT), yaxis_title="Value")
-        st.plotly_chart(fig_ph2, use_container_width=True)
+        ppn_chart(fig_ph2, use_container_width=True)
 
     st.divider()
 
@@ -721,7 +737,7 @@ with tab3:
             font=dict(color=CHART_FONT), xaxis=dict(range=[0,1.1], gridcolor=CHART_GRID),
             xaxis_title="Avg DOS", yaxis_title="", height=420,
             margin=dict(l=0,r=40,t=10,b=0))
-        st.plotly_chart(fig_top, use_container_width=True)
+        ppn_chart(fig_top, use_container_width=True)
 
     with bc2:
         st.markdown('<span class="badge-worst">⚠️ Bottom 5 Decision Makers</span>',
@@ -743,7 +759,7 @@ with tab3:
             font=dict(color=CHART_FONT), xaxis=dict(range=[0,1.1], gridcolor=CHART_GRID),
             xaxis_title="Avg DOS", yaxis_title="", height=420,
             margin=dict(l=0,r=40,t=10,b=0))
-        st.plotly_chart(fig_bot, use_container_width=True)
+        ppn_chart(fig_bot, use_container_width=True)
 
     st.divider()
     st.markdown("#### Full Player Rankings")
@@ -773,7 +789,7 @@ with tab3:
                 title=team, paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                 font=dict(color=CHART_FONT), xaxis=dict(range=[0,1.15], gridcolor=CHART_GRID),
                 xaxis_title="Avg DOS", height=420)
-            st.plotly_chart(fig_pl, use_container_width=True)
+            ppn_chart(fig_pl, use_container_width=True)
 
 
 # ╔═══════════════════════════════════════════════════════════════════════════
@@ -803,7 +819,7 @@ with tab4:
         fig_ec.update_traces(textposition="outside")
         fig_ec.update_layout(paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                               font=dict(color=CHART_FONT))
-        st.plotly_chart(fig_ec, use_container_width=True)
+        ppn_chart(fig_ec, use_container_width=True)
 
     with col_e2:
         fig_de = go.Figure()
@@ -818,7 +834,7 @@ with tab4:
                               paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                               font=dict(color=CHART_FONT),
                               yaxis_title="Decision Optimality Score")
-        st.plotly_chart(fig_de, use_container_width=True)
+        ppn_chart(fig_de, use_container_width=True)
 
     col_e3, col_e4 = st.columns(2)
     with col_e3:
@@ -830,7 +846,7 @@ with tab4:
         fig_oe.update_layout(paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                               font=dict(color=CHART_FONT), showlegend=False,
                               xaxis_tickangle=-15)
-        st.plotly_chart(fig_oe, use_container_width=True)
+        ppn_chart(fig_oe, use_container_width=True)
 
     with col_e4:
         fig_pve = px.scatter(
@@ -838,14 +854,14 @@ with tab4:
             color_discrete_map=ERROR_COLORS,
             title="P(t) vs V(t) for Failed Passes",
             labels={"P_t":"P(t)","V_t":"V(t)","error_type":"Error Type"},
-            hover_data=["pass_id","G_t","team"], opacity=0.7)
+            hover_data=["pass_id","G_t","team"], opacity=0.85)
         fig_pve.add_shape(type="line", x0=0, y0=0, x1=1, y1=1,
-                          line=dict(color="white", dash="dash", width=1))
+                          line=dict(color="#64748b", dash="dash", width=1.5))
         fig_pve.add_annotation(x=0.82, y=0.88, text="P = V",
-                                showarrow=False, font=dict(color=CHART_FONT, size=10))
+                                showarrow=False, font=dict(color="#64748b", size=10))
         fig_pve.update_layout(paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                                font=dict(color=CHART_FONT))
-        st.plotly_chart(fig_pve, use_container_width=True)
+        ppn_chart(fig_pve, use_container_width=True)
         st.caption("Above diagonal (V>P): Overambitious — space open but pass too risky.  "
                    "Below (P≥V): Trapped — pass safe but no good space available.")
 
@@ -882,7 +898,7 @@ if False:  # noqa — kept for future re-enable
                                    labels={"pct_improvement":"% Improvement"})
             fig_imp.update_layout(paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                                    font=dict(color=CHART_FONT))
-            st.plotly_chart(fig_imp, use_container_width=True)
+            ppn_chart(fig_imp, use_container_width=True)
 
         with col_o2:
             lim = max(opt_f["gain_after"].max(), opt_f["gain_before"].max())*1.05
@@ -897,7 +913,7 @@ if False:  # noqa — kept for future re-enable
                              line=dict(color="white", dash="dash", width=1))
             fig_ba.update_layout(paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                                   font=dict(color=CHART_FONT))
-            st.plotly_chart(fig_ba, use_container_width=True)
+            ppn_chart(fig_ba, use_container_width=True)
 
         st.divider()
         col_o3, col_o4 = st.columns(2)
@@ -917,7 +933,7 @@ if False:  # noqa — kept for future re-enable
                                   paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                                   font=dict(color=CHART_FONT),
                                   yaxis_title="Avg F(t)")
-            st.plotly_chart(fig_bt, use_container_width=True)
+            ppn_chart(fig_bt, use_container_width=True)
 
         with col_o4:
             bo = (opt_f.groupby("success")[["pct_improvement"]].mean()
@@ -932,7 +948,7 @@ if False:  # noqa — kept for future re-enable
                                   paper_bgcolor=CHART_BG, plot_bgcolor=CHART_PLOT,
                                   font=dict(color=CHART_FONT),
                                   yaxis_title="Avg % Improvement")
-            st.plotly_chart(fig_bo, use_container_width=True)
+            ppn_chart(fig_bo, use_container_width=True)
 
         st.divider()
         st.markdown("#### Top 10 Events — Highest Formation Gain Improvement")
