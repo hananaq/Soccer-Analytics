@@ -6,11 +6,15 @@ Run: streamlit run dashboard.py
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
 import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
 from pitch import (make_pitch_fig, add_players, add_ball, add_ghost_players,
-                   add_pass_arrow, TEAM_COLORS, ERROR_COLORS, PITCH_BG, PAPER_BG)
+                   add_pass_arrow, add_legend, TEAM_COLORS, ERROR_COLORS,
+                   PITCH_BG, PAPER_BG)
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -428,56 +432,46 @@ with tab2:
                 g_max = pass_opts["G_t"].max()
                 g_min = pass_opts["G_t"].min()
 
-                fig_p = make_pitch_fig(
+                fig_p, ax_p = make_pitch_fig(
                     title=f"PPN — Pass {pass_id}  |  "
                           f"Passer: {sender_lbl}  |  DOS: {row['DOS']:.3f}",
                     height=480)
 
                 rnum = int(row["receiver_number"]) if pd.notna(row["receiver_number"]) else None
-                add_players(fig_p, snap, snum, rnum, row["team"])
-                add_ball(fig_p, row.get("ball_x"), row.get("ball_y"))
+                add_players(ax_p, snap, snum, rnum, row["team"])
+                add_ball(ax_p, row.get("ball_x"), row.get("ball_y"))
 
+                optimal_handle = None
                 for _, opt_row in pass_opts.iterrows():
-                    g_norm = (opt_row["G_t"]-g_min)/(g_max-g_min+1e-9)
-                    clr    = f"rgb({int(255*(1-g_norm))},{int(200*g_norm+55)},60)"
+                    g_norm = (opt_row["G_t"] - g_min) / (g_max - g_min + 1e-9)
+                    # Matplotlib-compatible colour: red→green gradient
+                    clr = (
+                        (255*(1-g_norm))/255,
+                        (200*g_norm + 55)/255,
+                        60/255,
+                    )
                     sx, sy = row["sx"], row["sy"]
                     rx, ry = opt_row["rx"], opt_row["ry"]
                     if any(pd.isna([sx, sy, rx, ry])): continue
                     is_chosen  = bool(opt_row["is_chosen"])
                     is_optimal = (opt_row["G_t"] == g_max)
-                    rec_lbl    = player_label(row["team"],
-                                             int(opt_row["receiver_number"]))
-                    hover_txt  = (
-                        f"<b>{rec_lbl}</b><br>"
-                        f"P(t)={opt_row['P_t']:.3f} · V(t)={opt_row['V_t']:.3f}<br>"
-                        f"G(t)={opt_row['G_t']:.4f}<br>"
-                        f"{'✓ Chosen  ' if is_chosen else ''}"
-                        f"{'★ Optimal' if is_optimal else ''}"
-                    )
-                    add_pass_arrow(fig_p, sx, sy, rx, ry,
-                                   color=clr, width=1.5+3.5*g_norm,
-                                   hover=hover_txt)
+                    add_pass_arrow(ax_p, sx, sy, rx, ry,
+                                   color=clr, width=1.5 + 3.5*g_norm)
                     if is_chosen:
-                        fig_p.add_trace(go.Scatter(
-                            x=[rx], y=[ry], mode="markers",
-                            marker=dict(size=24, color="rgba(0,0,0,0)",
-                                        line=dict(color="white", width=2.5)),
-                            showlegend=False, hoverinfo="skip"))
+                        # White hollow ring around chosen receiver
+                        ax_p.scatter(rx, ry, s=420, facecolors="none",
+                                     edgecolors="white", linewidths=2.5, zorder=8)
                     if is_optimal:
-                        fig_p.add_trace(go.Scatter(
-                            x=[rx], y=[ry], mode="markers",
-                            marker=dict(size=14, color="gold", symbol="star",
-                                        line=dict(color="black", width=1)),
-                            name="Optimal ★", showlegend=True, hoverinfo="skip"))
+                        ax_p.scatter(rx, ry, s=180, c="gold", marker="*",
+                                     edgecolors="black", linewidths=0.8, zorder=9)
+                        optimal_handle = Line2D(
+                            [0], [0], marker="*", color="w",
+                            markerfacecolor="gold", markersize=10,
+                            label="Optimal ★", linestyle="None")
 
-                # Legend stubs for teams
-                for team, color in TEAM_COLORS.items():
-                    fig_p.add_trace(go.Scatter(
-                        x=[None], y=[None], mode="markers",
-                        marker=dict(size=10, color=color),
-                        name=team, showlegend=True))
-
-                st.plotly_chart(fig_p, use_container_width=True)
+                add_legend(ax_p, extra_handles=[optimal_handle])
+                st.pyplot(fig_p, use_container_width=True)
+                plt.close(fig_p)
                 st.caption("★ Gold star = optimal receiver · White ring = chosen · "
                            "Arrow width/colour = G(t)")
 
@@ -565,7 +559,7 @@ if False:  # noqa — kept for future re-enable
                     if v is not None and not pd.isna(v):
                         pct_imp = f"  |  Formation gain: +{v:.1f}%"
 
-                fig_g = make_pitch_fig(
+                fig_g, ax_g = make_pitch_fig(
                     title=(f"Ghost View — Pass {pass_id}  |  "
                            f"{row['team']}  |  "
                            f"Passer: {player_label(row['team'], snum) if snum else '?'}"
@@ -573,15 +567,15 @@ if False:  # noqa — kept for future re-enable
                     height=520)
 
                 # Real players
-                add_players(fig_g, snap, snum, rnum, row["team"])
+                add_players(ax_g, snap, snum, rnum, row["team"])
 
                 # Ball
-                add_ball(fig_g, row.get("ball_x"), row.get("ball_y"))
+                add_ball(ax_g, row.get("ball_x"), row.get("ball_y"))
 
                 # Actual pass arrow
                 if all(not pd.isna(v) for v in [row["sx"], row["sy"],
                                                   row["rx"], row["ry"]]):
-                    add_pass_arrow(fig_g,
+                    add_pass_arrow(ax_g,
                                    float(row["sx"]), float(row["sy"]),
                                    float(row["rx"]), float(row["ry"]),
                                    color="white", width=2.5)
@@ -598,22 +592,17 @@ if False:  # noqa — kept for future re-enable
                 show_nudge = st.checkbox("Show nudge arrows", value=True,
                                          key="ghost_arrows")
                 if not opos_filtered.empty:
-                    add_ghost_players(fig_g, opos_filtered,
+                    add_ghost_players(ax_g, opos_filtered,
                                       show_nudge_arrow=show_nudge)
 
-                # Legend stubs
-                for team, color in TEAM_COLORS.items():
-                    fig_g.add_trace(go.Scatter(
-                        x=[None], y=[None], mode="markers",
-                        marker=dict(size=10, color=color),
-                        name=team, showlegend=True))
-                fig_g.add_trace(go.Scatter(
-                    x=[None], y=[None], mode="markers",
-                    marker=dict(size=12, color="rgba(255,255,255,0.5)",
-                                line=dict(color="white", width=2)),
-                    name="Ghost (optimal pos.)", showlegend=True))
-
-                st.plotly_chart(fig_g, use_container_width=True)
+                # Legend with ghost handle
+                ghost_handle = mpatches.Patch(
+                    facecolor=(1.0, 1.0, 1.0, 0.5),
+                    edgecolor="white", linewidth=1.5,
+                    label="Ghost (optimal pos.)")
+                add_legend(ax_g, extra_handles=[ghost_handle])
+                st.pyplot(fig_g, use_container_width=True)
+                plt.close(fig_g)
 
                 # Per-player breakdown table — only the two ghost players
                 if not opos_filtered.empty:

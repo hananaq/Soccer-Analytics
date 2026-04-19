@@ -1,10 +1,16 @@
 """
-pitch.py — Plotly pitch drawing utilities for the PPN Football Dashboard.
+pitch.py — mplsoccer pitch drawing utilities for the PPN Football Dashboard.
 Coordinates: origin at centre, x: -52.5 → +52.5, y: -34 → +34.
+(SkillCorner coordinate system: pitch_length=105, pitch_width=68)
 """
 import numpy as np
-import plotly.graph_objects as go
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
+from mplsoccer import Pitch
 
+# ── Kept for backward-compat references in dashboard.py ──────────────────────
 PITCH_BG   = "#1a472a"
 PAPER_BG   = "#0d0d0d"
 LINE_COLOR = "white"
@@ -21,112 +27,49 @@ ERROR_COLORS = {
     "Success":                         "#2ecc71",
 }
 
-
-# ── Shape helpers ─────────────────────────────────────────────────────────────
-
-def _line(x0, y0, x1, y1, color=LINE_COLOR, width=1.8):
-    return dict(type="line", x0=x0, y0=y0, x1=x1, y1=y1,
-                line=dict(color=color, width=width))
-
-
-def _circle_trace(cx, cy, r, color=LINE_COLOR, width=1.8, n=120, dash="solid"):
-    t = np.linspace(0, 2 * np.pi, n)
-    return go.Scatter(
-        x=cx + r * np.cos(t), y=cy + r * np.sin(t),
-        mode="lines", line=dict(color=color, width=width, dash=dash),
-        showlegend=False, hoverinfo="skip"
-    )
+_PITCH_KW = dict(
+    pitch_type="skillcorner",
+    pitch_length=105,
+    pitch_width=68,
+    pitch_color="grass",
+    line_color="white",
+    stripe=True,
+    stripe_color="#1a5c2a",
+)
 
 
 # ── Core pitch builder ────────────────────────────────────────────────────────
 
 def make_pitch_fig(title="", height=520, show_legend=True, bg=PITCH_BG):
-    shapes = [
-        # Outline
-        _line(-52.5, -34,  52.5, -34),
-        _line(-52.5,  34,  52.5,  34),
-        _line(-52.5, -34, -52.5,  34),
-        _line( 52.5, -34,  52.5,  34),
-        # Halfway
-        _line(0, -34, 0, 34),
-        # Left penalty box
-        _line(-52.5, -20.16, -36, -20.16),
-        _line(-52.5,  20.16, -36,  20.16),
-        _line(-36,   -20.16, -36,  20.16),
-        # Right penalty box
-        _line( 52.5, -20.16,  36, -20.16),
-        _line( 52.5,  20.16,  36,  20.16),
-        _line(  36,  -20.16,  36,  20.16),
-        # Left small box
-        _line(-52.5, -4.58, -47, -4.58),
-        _line(-52.5,  4.58, -47,  4.58),
-        _line(-47,   -4.58, -47,  4.58),
-        # Right small box
-        _line( 52.5, -4.58,  47, -4.58),
-        _line( 52.5,  4.58,  47,  4.58),
-        _line(  47,  -4.58,  47,  4.58),
-        # Left goal
-        _line(-52.5, -3.66, -54.5, -3.66, color="#bbbbbb", width=1.2),
-        _line(-52.5,  3.66, -54.5,  3.66, color="#bbbbbb", width=1.2),
-        _line(-54.5,  -3.66, -54.5,  3.66, color="#bbbbbb", width=1.2),
-        # Right goal
-        _line( 52.5, -3.66,  54.5, -3.66, color="#bbbbbb", width=1.2),
-        _line( 52.5,  3.66,  54.5,  3.66, color="#bbbbbb", width=1.2),
-        _line(  54.5, -3.66,  54.5,  3.66, color="#bbbbbb", width=1.2),
-        # Centre spot
-        dict(type="circle", x0=-0.35, y0=-0.35, x1=0.35, y1=0.35,
-             fillcolor=LINE_COLOR, line=dict(color=LINE_COLOR, width=0)),
-        # Penalty spots
-        dict(type="circle", x0=-41.2, y0=-0.3, x1=-40.6, y1=0.3,
-             fillcolor=LINE_COLOR, line=dict(color=LINE_COLOR, width=0)),
-        dict(type="circle", x0= 40.6, y0=-0.3, x1= 41.2, y1=0.3,
-             fillcolor=LINE_COLOR, line=dict(color=LINE_COLOR, width=0)),
-    ]
+    """
+    Returns (fig, ax) using mplsoccer Pitch.
+    height is treated as approximate pixels at 96 dpi for sizing.
+    """
+    height_in = max(height / 96, 5.0)
+    width_in  = height_in * (105 / 68) * 1.08   # slight extra for margins
 
-    fig = go.Figure()
-    fig.add_trace(_circle_trace(0, 0, 9.15))
+    pitch = Pitch(**_PITCH_KW)
+    fig, ax = pitch.draw(figsize=(width_in, height_in))
 
-    # Penalty arcs
-    t_l = np.linspace(np.radians(37), np.radians(143), 60)
-    fig.add_trace(go.Scatter(x=-40.9 + 9.15*np.cos(t_l), y=9.15*np.sin(t_l),
-                              mode="lines", line=dict(color=LINE_COLOR, width=1.8),
-                              showlegend=False, hoverinfo="skip"))
-    t_r = np.linspace(np.radians(180+37), np.radians(180+143), 60)
-    fig.add_trace(go.Scatter(x=40.9 + 9.15*np.cos(t_r), y=9.15*np.sin(t_r),
-                              mode="lines", line=dict(color=LINE_COLOR, width=1.8),
-                              showlegend=False, hoverinfo="skip"))
+    fig.patch.set_facecolor("#0d0d0d")
 
-    fig.update_layout(
-        shapes=shapes,
-        plot_bgcolor=bg,
-        paper_bgcolor=PAPER_BG,
-        font=dict(color="white"),
-        title=dict(text=title, font=dict(color="white", size=12), x=0.5),
-        xaxis=dict(range=[-56, 56], showgrid=False, zeroline=False,
-                   showticklabels=False, fixedrange=True),
-        yaxis=dict(range=[-37, 37], showgrid=False, zeroline=False,
-                   showticklabels=False, scaleanchor="x", scaleratio=1,
-                   fixedrange=True),
-        margin=dict(l=0, r=0, t=45, b=0),
-        showlegend=show_legend,
-        legend=dict(bgcolor="rgba(20,20,20,0.85)", bordercolor="white",
-                    borderwidth=1, font=dict(color="white", size=10)),
-        height=height,
-    )
-    return fig
+    if title:
+        ax.set_title(title, color="white", fontsize=9.5, pad=6,
+                     fontfamily="sans-serif")
+
+    return fig, ax
 
 
 # ── Player scatter ────────────────────────────────────────────────────────────
 
-def add_players(fig, snap_df, sender_num, receiver_num, attacking_team,
+def add_players(ax, snap_df, sender_num, receiver_num, attacking_team,
                 show_names=True):
     """
-    Plot all players from a snapshot DataFrame.
+    Plot all players from a snapshot DataFrame onto a matplotlib Axes.
     snap_df columns: team, player_number, player_name, x, y
     """
     for team, grp in snap_df.groupby("team"):
-        color     = TEAM_COLORS.get(team, "#888888")
-        opp_color = "#e74c3c" if team == "Auckland FC" else "#3498db"
+        color = TEAM_COLORS.get(team, "#888888")
 
         for _, p in grp.iterrows():
             pnum  = int(p["player_number"])
@@ -136,69 +79,59 @@ def add_players(fig, snap_df, sender_num, receiver_num, attacking_team,
             is_sender   = (pnum == sender_num   and team == attacking_team)
             is_receiver = (pnum == receiver_num and team == attacking_team)
 
-            symbol = "diamond"   if is_sender   else \
-                     "circle"    if is_receiver  else "circle"
-            size   = 22          if is_sender    else \
-                     20          if is_receiver   else 14
-            border = 3           if (is_sender or is_receiver) else 1.2
-            border_col = "gold"  if is_sender else \
-                         "white" if is_receiver else "white"
+            marker = "D"   if is_sender   else "o"
+            size   = 200   if is_sender   else 170 if is_receiver else 100
+            lw     = 2.5   if (is_sender or is_receiver) else 1.0
+            edge   = "gold" if is_sender else "white"
 
-            short_name = pname.split()[-1] if pname else ""
-            label      = f"{pnum}"
-            hover_txt  = (f"<b>{pname}</b> (#{pnum})<br>{team}"
-                          f"{'<br>⭐ Passer' if is_sender else ''}"
-                          f"{'<br>🎯 Receiver' if is_receiver else ''}")
+            ax.scatter(x, y, s=size, c=color, marker=marker,
+                       linewidths=lw, edgecolors=edge, zorder=5)
 
-            fig.add_trace(go.Scatter(
-                x=[x], y=[y],
-                mode="markers+text" if show_names else "markers",
-                marker=dict(size=size, color=color, symbol=symbol,
-                            line=dict(color=border_col, width=border)),
-                text=[label],
-                textposition="middle center",
-                textfont=dict(size=7, color="white", family="Arial Black"),
-                name=team,
-                legendgroup=team,
-                showlegend=False,
-                hovertemplate=hover_txt + "<extra></extra>",
-                customdata=[[pname, pnum, team]],
-            ))
+            # Player number drawn inside the dot
+            ax.text(x, y, str(pnum),
+                    ha="center", va="center",
+                    fontsize=6.5, fontweight="bold", color="white",
+                    zorder=6)
 
-            # Name label below player
-            if show_names and short_name:
-                fig.add_annotation(
-                    x=x, y=y - 2.8,
-                    text=f'<span style="font-size:8px">{short_name}</span>',
-                    showarrow=False,
-                    font=dict(color="white", size=8),
-                    bgcolor="rgba(0,0,0,0.55)",
-                    borderpad=1,
-                )
+            # Short surname label below
+            if show_names and pname:
+                short_name = pname.split()[-1]
+                ax.text(x, y - 2.8, short_name,
+                        ha="center", va="top",
+                        fontsize=7, color="white",
+                        bbox=dict(boxstyle="round,pad=0.15",
+                                  facecolor="black", alpha=0.55,
+                                  edgecolor="none"),
+                        zorder=6)
 
 
-def add_ball(fig, bx, by):
+# ── Ball ─────────────────────────────────────────────────────────────────────
+
+def add_ball(ax, bx, by):
     """Add the ball marker to the pitch."""
     if bx is None or by is None:
         return
-    fig.add_trace(go.Scatter(
-        x=[bx], y=[by],
-        mode="markers",
-        marker=dict(size=13, color="white", symbol="circle",
-                    line=dict(color="#333", width=1.5)),
-        name="Ball",
-        showlegend=True,
-        hovertemplate="Ball<extra></extra>",
-    ))
-    fig.add_annotation(x=bx, y=by + 2.5, text="⚽",
-                       showarrow=False, font=dict(size=12))
+    try:
+        bx, by = float(bx), float(by)
+        if np.isnan(bx) or np.isnan(by):
+            return
+    except (TypeError, ValueError):
+        return
+
+    ax.scatter(bx, by, s=160, c="white", marker="o",
+               linewidths=1.5, edgecolors="#333333", zorder=7,
+               label="Ball")
+    ax.text(bx, by + 2.5, "⚽",
+            ha="center", va="bottom", fontsize=11, zorder=8)
 
 
-def add_ghost_players(fig, opos_df, show_nudge_arrow=True):
+# ── Ghost players ─────────────────────────────────────────────────────────────
+
+def add_ghost_players(ax, opos_df, show_nudge_arrow=True):
     """
     Overlay ghost (optimised) positions for off-ball players.
-    opos_df: DataFrame with orig_x/y, opt_x/y, player_number,
-             player_name, nudge_m, g_before, g_after, is_receiver
+    opos_df columns: orig_x/y, opt_x/y, player_number, player_name,
+                     nudge_m, g_before, g_after, is_receiver
     """
     for _, row in opos_df.iterrows():
         ox, oy = float(row["orig_x"]), float(row["orig_y"])
@@ -210,86 +143,113 @@ def add_ghost_players(fig, opos_df, show_nudge_arrow=True):
         g_aft  = float(row["g_after"])
         is_rec = bool(row["is_receiver"])
 
-        if nudge < 0.3:          # negligible nudge — skip ghost
+        if nudge < 0.3:
             continue
 
-        g_gain = g_aft - g_bef
-        ghost_color = "rgba(255,255,255,0.55)"
-        ghost_line  = "rgba(255,255,255,0.9)"
-        ghost_size  = 22 if is_rec else 14
-        ghost_border= 2.5 if is_rec else 1.5
+        g_gain      = g_aft - g_bef
+        ghost_alpha = 0.55
+        ghost_size  = 170 if is_rec else 100
+        ghost_lw    = 2.0 if is_rec else 1.5
+        ghost_rgba  = (1.0, 1.0, 1.0, ghost_alpha)
+        edge_rgba   = (1.0, 1.0, 1.0, 0.9)
 
-        # Ghost circle (dashed outline)
-        fig.add_trace(_circle_trace(
-            nx, ny, r=ghost_size * 0.18,
-            color=ghost_line, width=ghost_border, dash="dash"
-        ))
+        # Dashed circle outline at ghost position
+        radius = 1.8 if is_rec else 1.3
+        circ = mpatches.Circle((nx, ny), radius,
+                                fill=False, linestyle="--",
+                                edgecolor=edge_rgba, linewidth=ghost_lw,
+                                zorder=4)
+        ax.add_patch(circ)
 
-        # Ghost dot
-        fig.add_trace(go.Scatter(
-            x=[nx], y=[ny],
-            mode="markers",
-            marker=dict(
-                size=ghost_size,
-                color=ghost_color,
-                symbol="circle",
-                line=dict(color=ghost_line, width=ghost_border),
-            ),
-            name="Ghost (optimal)" if is_rec else "Ghost",
-            legendgroup="ghost",
-            showlegend=is_rec,
-            hovertemplate=(
-                f"<b>Ghost #{pnum}</b> ({pname})<br>"
-                f"Nudge: {nudge:.1f} m<br>"
-                f"G before: {g_bef:.4f}<br>"
-                f"G after:  {g_aft:.4f}<br>"
-                f"ΔG: {g_gain:+.4f}"
-                + (" &nbsp;<b>← Receiver</b>" if is_rec else "")
-                + "<extra></extra>"
-            ),
-        ))
+        # Solid ghost dot (low alpha)
+        ax.scatter(nx, ny, s=ghost_size, c=[ghost_rgba], marker="o",
+                   linewidths=ghost_lw, edgecolors=[edge_rgba],
+                   zorder=4,
+                   label="Ghost (optimal pos.)" if is_rec else None)
 
         # Nudge arrow: original → ghost
         if show_nudge_arrow:
-            arrow_col = "#f1c40f" if is_rec else "rgba(255,255,255,0.5)"
-            fig.add_annotation(
-                ax=ox, ay=oy, x=nx, y=ny,
-                xref="x", yref="y", axref="x", ayref="y",
-                showarrow=True,
-                arrowhead=3, arrowsize=1.0,
-                arrowwidth=2.5 if is_rec else 1.2,
-                arrowcolor=arrow_col,
-                text="",
+            arrow_col = "#f1c40f" if is_rec else (1.0, 1.0, 1.0, 0.5)
+            ax.annotate(
+                "",
+                xy=(nx, ny), xytext=(ox, oy),
+                arrowprops=dict(
+                    arrowstyle="-|>",
+                    color=arrow_col,
+                    lw=2.0 if is_rec else 1.0,
+                    mutation_scale=12,
+                ),
+                zorder=4,
             )
 
-        # Label gain change on ghost
+        # ΔG label above ghost position
         if abs(g_gain) > 0.005:
             sign = "+" if g_gain >= 0 else ""
-            fig.add_annotation(
-                x=nx, y=ny + 2.8,
-                text=f'<span style="font-size:8px">{sign}{g_gain:.3f}</span>',
-                showarrow=False,
-                font=dict(color="#f1c40f" if is_rec else "white", size=8),
-                bgcolor="rgba(0,0,0,0.6)", borderpad=1,
-            )
+            ax.text(nx, ny + 2.8,
+                    f"{sign}{g_gain:.3f}",
+                    ha="center", va="bottom",
+                    fontsize=7,
+                    color="#f1c40f" if is_rec else "white",
+                    bbox=dict(boxstyle="round,pad=0.15",
+                              facecolor="black", alpha=0.6,
+                              edgecolor="none"),
+                    zorder=5)
 
 
-def add_pass_arrow(fig, sx, sy, rx, ry, color="#ffffff", width=2,
+# ── Pass arrow ────────────────────────────────────────────────────────────────
+
+def add_pass_arrow(ax, sx, sy, rx, ry, color="#ffffff", width=2,
                    label=None, hover=None):
-    """Sender → receiver pass arrow."""
-    fig.add_annotation(
-        ax=sx, ay=sy, x=rx, y=ry,
-        xref="x", yref="y", axref="x", ayref="y",
-        showarrow=True,
-        arrowhead=2, arrowsize=1.2, arrowwidth=width,
-        arrowcolor=color, text=label or "",
-        font=dict(color="white", size=9),
+    """
+    Sender → receiver pass arrow.
+    `hover` is ignored (no interactivity in matplotlib).
+    `width` is Plotly pixel width; scaled to matplotlib linewidth.
+    """
+    lw = max(width * 0.75, 0.6)
+    ax.annotate(
+        "",
+        xy=(rx, ry), xytext=(sx, sy),
+        arrowprops=dict(
+            arrowstyle="-|>",
+            color=color,
+            lw=lw,
+            mutation_scale=12,
+        ),
+        zorder=5,
     )
-    if hover:
-        fig.add_trace(go.Scatter(
-            x=[(sx + rx) / 2], y=[(sy + ry) / 2],
-            mode="markers",
-            marker=dict(size=10, color=color, opacity=0.01),
-            hovertemplate=hover + "<extra></extra>",
-            showlegend=False,
-        ))
+    if label:
+        mx, my = (sx + rx) / 2, (sy + ry) / 2
+        ax.text(mx, my, label,
+                ha="center", va="center",
+                fontsize=8, color="white",
+                bbox=dict(boxstyle="round,pad=0.2",
+                          facecolor="black", alpha=0.6,
+                          edgecolor="none"),
+                zorder=6)
+
+
+# ── Legend helper ─────────────────────────────────────────────────────────────
+
+def add_legend(ax, teams=None, extra_handles=None):
+    """
+    Add a dark legend to the axes for team colours and optional extras.
+    teams: list of team name strings (must be in TEAM_COLORS)
+    extra_handles: list of matplotlib legend handles to append
+    """
+    handles = []
+    for team in (teams or list(TEAM_COLORS.keys())):
+        color = TEAM_COLORS.get(team, "#888888")
+        handles.append(mpatches.Patch(facecolor=color, edgecolor="white",
+                                      linewidth=0.8, label=team))
+    if extra_handles:
+        handles.extend([h for h in extra_handles if h is not None])
+    if handles:
+        ax.legend(
+            handles=handles,
+            loc="upper right",
+            framealpha=0.85,
+            facecolor="#141414",
+            edgecolor="white",
+            labelcolor="white",
+            fontsize=9,
+        )
